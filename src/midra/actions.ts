@@ -423,53 +423,100 @@ export default class ActionsMidra extends Actions {
 				for (const scr of action.options.screen) {
 					const screen = this.choices.getScreenInfo(scr)
 					if (this.choices.isLocked(screen.id, action.options.preset)) continue
-					const presetpath = [
-						'device', 
-						screen.prefixverylong + 'List',
-						'items', screen.platformId, 
-						'presetList', 'items', this.choices.getPreset(screen.id, action.options.preset)
+
+					// A new path must be constructed based on the T-Bar position ('UP' or 'DOWN').
+					const tbarState = this.state.get(
+						`DEVICE/device/transition/${screen.prefixverylong}List/items/${screen.platformId}/status/pp/transition`
+					)
+					const isPreview = this.choices.getPreset(screen.id, action.options.preset) === 'PREVIEW'
+					const target = tbarState === 'AT_DOWN' ? (isPreview ? 'UP' : 'DOWN') : isPreview ? 'DOWN' : 'UP'
+					const basePath = [
+						'device',
+						screen.isAux ? '$auxiliaryScreen' : '$screen',
+						'@items',
+						screen.platformId,
+						'$preset',
+						'@items',
+						target,
 					]
+
 					if (screen.isAux && action.options['sourceBack'] !== 'keep')
 						// on Midra on aux there is only background, so we don't show a layer dropdown and just set the background
-						this.connection.sendWSmessage([...presetpath, 'background', 'source', 'pp', 'content'], action.options['sourceBack'])
+						this.connection.sendWSmessage(
+							[...basePath, 'background', 'source', '@props', 'content'],
+							action.options['sourceBack']
+						)
 					else
 						// else decide which dropdown to use for which layer
-						for (const layer of action.options[`layer${screen}`]) {
+						for (const layer of action.options[`layer${screen.id}`]) {
 							if (layer === 'NATIVE' && action.options['sourceNative'] !== 'keep') {
-								this.connection.sendWSmessage([...presetpath, 'background', 'source', 'pp', 'set'], action.options['sourceNative'].replace(/\D/g, ''))
+								this.connection.sendWSmessage(
+									[...basePath, 'background', 'source', '@props', 'set'],
+									action.options['sourceNative'].replace(/\D/g, '')
+								)
 							} else if (layer === 'TOP' && action.options['sourceFront'] !== 'keep') {
-								this.connection.sendWSmessage([...presetpath, 'top', 'source', 'pp', 'frame'], action.options['sourceFront'].replace(/\D/g, ''))
-							} else if ( action.options['sourceLayer'] !== 'keep') {
-								this.connection.sendWSmessage([...presetpath, 'liveLayerList', 'items', layer, 'source', 'pp', 'input'], action.options['sourceLayer'])
+								this.connection.sendWSmessage(
+									[...basePath, 'top', 'source', '@props', 'frame'],
+									action.options['sourceFront'].replace(/\D/g, '')
+								)
+							} else if (layer.match(/^\d+$/) && action.options['sourceLayer'] !== 'keep') {
+								this.connection.sendWSmessage(
+									[...basePath, '$liveLayer', '@items', layer, 'source', '@props', 'input'],
+									action.options['sourceLayer']
+								)
 							}
 						}
 				}
 			} else if (action.options.method === 'sel') {
 				const preset = this.choices.getPresetSelection('sel')
-				this.choices.getSelectedLayers()
+				this.choices
+					.getSelectedLayers()
 					.filter((selection) => this.choices.isLocked(selection.screenAuxKey, preset) === false)
-					.map(layer => {
+					.map((layer) => {
 						return {
 							screen: this.choices.getScreenInfo(layer.screenAuxKey),
-							layerKey: layer.layerKey 
+							layerKey: layer.layerKey,
 						}
 					})
 					.forEach((layer) => {
-						const presetpath = [
-							'device', 
-							layer.screen.isAux ? 'auxiliaryScreenList' : 'screenList',
-							'items', layer.screen.platformId, 
-							'presetList', 'items', this.choices.getPreset(layer.screen.id,'sel')
+						// A new path must be constructed based on the T-Bar position ('UP' or 'DOWN').
+						const tbarState = this.state.get(
+							`DEVICE/device/transition/${layer.screen.prefixverylong}List/items/${layer.screen.platformId}/status/pp/transition`
+						)
+						const isPreview = this.choices.getPreset(layer.screen.id, 'sel') === 'PREVIEW'
+						const target = tbarState === 'AT_DOWN' ? (isPreview ? 'UP' : 'DOWN') : isPreview ? 'DOWN' : 'UP'
+						const basePath = [
+							'device',
+							layer.screen.isAux ? '$auxiliaryScreen' : '$screen',
+							'@items',
+							layer.screen.platformId,
+							'$preset',
+							'@items',
+							target,
 						]
+
 						if (layer.layerKey === 'BKG' && layer.screen.isScreen && action.options['sourceNative'] !== 'keep') {
-								this.connection.sendWSmessage([...presetpath, 'background', 'source', 'pp', 'set'], action.options['sourceNative'].replace(/\D/g, ''))
-							} else if (layer.layerKey === 'BKG' && layer.screen.isAux && action.options['sourceBack'] !== 'keep') {
-								this.connection.sendWSmessage([...presetpath, 'background', 'source', 'pp', 'content'], action.options['sourceBack'])
-							} else if (layer.layerKey === 'TOP' && action.options['sourceFront'] !== 'keep') {
-								this.connection.sendWSmessage([...presetpath, 'top', 'source', 'pp', 'frame'], action.options['sourceFront'].replace(/\D/g, ''))
-							} else if ( action.options['sourceLayer'] !== 'keep') {
-								this.connection.sendWSmessage([...presetpath, 'liveLayerList', 'items', layer.layerKey, 'source', 'pp', 'input'], action.options['sourceLayer'])
-							}
+							this.connection.sendWSmessage(
+								[...basePath, 'background', 'source', '@props', 'set'],
+								action.options['sourceNative'].replace(/\D/g, '')
+							)
+						} else if (layer.layerKey === 'BKG' && layer.screen.isAux && action.options['sourceBack'] !== 'keep') {
+							this.connection.sendWSmessage(
+								[...basePath, 'background', 'source', '@props', 'content'],
+								action.options['sourceBack']
+							)
+						} else if (layer.layerKey === 'TOP' && action.options['sourceFront'] !== 'keep') {
+							this.connection.sendWSmessage(
+								[...basePath, 'top', 'source', '@props', 'frame'],
+								action.options['sourceFront'].replace(/\D/g, '')
+							)
+						} else if (layer.layerKey.match(/^\d+$/) && action.options['sourceLayer'] !== 'keep') {
+							// MODIFIED: This line now uses the corrected path.
+							this.connection.sendWSmessage(
+								[...basePath, '$liveLayer', '@items', layer.layerKey, 'source', '@props', 'input'],
+								action.options['sourceLayer']
+							)
+						}
 					})
 			}
 			this.instance.sendXupdate()
@@ -477,7 +524,6 @@ export default class ActionsMidra extends Actions {
 
 		// don't build a dropdown for aux on midra
 		this.choices.getScreensArray().forEach((screen) => {
-			
 			deviceSelectSource.options.push({
 				id: `layer${screen.id}`,
 				type: 'multidropdown',
@@ -486,7 +532,7 @@ export default class ActionsMidra extends Actions {
 				default: ['1'],
 				isVisibleData: screen.id,
 				isVisible: (options, screenId) => {
-					return options.method === 'spec' && options.screen.includes(screenId)	
+					return options.method === 'spec' && options.screen.includes(screenId)
 				},
 			})
 		})
@@ -495,7 +541,7 @@ export default class ActionsMidra extends Actions {
 				id: 'sourceNative',
 				type: 'dropdown',
 				label: 'Screen Background Source',
-				choices: [{ id: 'keep', label: "Don't change source"}, ...this.choices.choicesBackgroundSourcesPlusNone],
+				choices: [{ id: 'keep', label: "Don't change source" }, ...this.choices.choicesBackgroundSourcesPlusNone],
 				default: 'keep',
 				isVisible: (options) => {
 					if (options.method === 'sel') return true
@@ -511,7 +557,7 @@ export default class ActionsMidra extends Actions {
 				id: 'sourceLayer',
 				type: 'dropdown',
 				label: 'Screen Layer Source',
-				choices: [{ id: 'keep', label: "Don't change source"}, ...this.choices.getSourceChoices()],
+				choices: [{ id: 'keep', label: "Don't change source" }, ...this.choices.getSourceChoices()],
 				default: 'keep',
 				isVisible: (options) => {
 					if (options.method === 'sel') return true
@@ -520,7 +566,8 @@ export default class ActionsMidra extends Actions {
 							options[`layer${screen}`]?.find((layer: string) => {
 								return layer.match(/^\d+$/)
 							})
-						) return true
+						)
+							return true
 					}
 					return false
 				},
@@ -529,7 +576,7 @@ export default class ActionsMidra extends Actions {
 				id: 'sourceFront',
 				type: 'dropdown',
 				label: 'Screen Foreground Source',
-				choices: [{ id: 'keep', label: "Don't change source"}, ...this.choices.choicesForegroundImagesSource],
+				choices: [{ id: 'keep', label: "Don't change source" }, ...this.choices.choicesForegroundImagesSource],
 				default: 'keep',
 				isVisible: (options) => {
 					if (options.method === 'sel') return true
@@ -545,7 +592,7 @@ export default class ActionsMidra extends Actions {
 				id: 'sourceBack',
 				type: 'dropdown',
 				label: 'Aux Background Source',
-				choices: [{ id: 'keep', label: "Don't change source"}, ...this.choices.getAuxBackgroundChoices()],
+				choices: [{ id: 'keep', label: "Don't change source" }, ...this.choices.getAuxBackgroundChoices()],
 				default: 'keep',
 				isVisible: (options) => {
 					if (options.method === 'sel') return true
@@ -556,12 +603,11 @@ export default class ActionsMidra extends Actions {
 					}
 					return false
 				},
-			},
+			}
 		)
 
 		return deviceSelectSource
 	}
-
 
 	/**
 	 * MARK: Set input keying
